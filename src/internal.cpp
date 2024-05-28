@@ -220,18 +220,18 @@ void Internal::DataHandler(sFrameOfMocapData* data, void* pUserData, Internal &i
 
     // Rigid Bodies
     ROS_INFO_COND(internal.rosparam.log_frames, "Rigid Bodies [Count=%d]", data->nRigidBodies);
-    for(i=0; i < data->nRigidBodies; i++)
-        {
-            if(internal.rosparam.pub_rigid_body)
-            {
-                PubRigidbodyPose(data->RigidBodies[i], internal);
-            }
-        ROS_INFO_COND(internal.rosparam.log_frames, "Rigid Body [ID=%d  Error=%3.2f]", data->RigidBodies[i].ID, data->RigidBodies[i].MeanError);//, bTrackingValid);
-        ROS_INFO_COND(internal.rosparam.log_frames, "x\ty\tz\tqx\tqy\tqz\tqw");
-        ROS_INFO_COND(internal.rosparam.log_frames, "%3.2f\t%3.2f\t%3.2f\t%3.2f\t%3.2f\t%3.2f\t%3.2f",
-            data->RigidBodies[i].x, data->RigidBodies[i].y, data->RigidBodies[i].z,
-            data->RigidBodies[i].qx, data->RigidBodies[i].qy, data->RigidBodies[i].qz, data->RigidBodies[i].qw);
-        }
+    // for(i=0; i < data->nRigidBodies; i++)
+    //     {
+    //         if(internal.rosparam.pub_rigid_body)
+    //         {
+    //             PubRigidbodyPose(data->RigidBodies[i], internal);
+    //         }
+    //     ROS_INFO_COND(internal.rosparam.log_frames, "Rigid Body [ID=%d  Error=%3.2f]", data->RigidBodies[i].ID, data->RigidBodies[i].MeanError);//, bTrackingValid);
+    //     ROS_INFO_COND(internal.rosparam.log_frames, "x\ty\tz\tqx\tqy\tqz\tqw");
+    //     ROS_INFO_COND(internal.rosparam.log_frames, "%3.2f\t%3.2f\t%3.2f\t%3.2f\t%3.2f\t%3.2f\t%3.2f",
+    //         data->RigidBodies[i].x, data->RigidBodies[i].y, data->RigidBodies[i].z,
+    //         data->RigidBodies[i].qx, data->RigidBodies[i].qy, data->RigidBodies[i].qz, data->RigidBodies[i].qw);
+    //     }
 
     // Markers
     for(i=0; i < data->nLabeledMarkers; i++) 
