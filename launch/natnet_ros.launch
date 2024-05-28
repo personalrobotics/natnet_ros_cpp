@@ -42,7 +42,7 @@
 
   <node pkg="natnet_ros_cpp" type="natnet_ros_cpp" name="natnet_ros" output="screen">
     <!-- CONFIG-FILE -->
-    <rosparam file="$(find natnet_ros_cpp)/config/$(arg conf_file)"/>   
+    <rosparam file="$(arg conf_file)"/>   
   
     <!-- LOGGING -->
     <param name="log_internals" value="$(arg log_internals)" type="bool"/>
