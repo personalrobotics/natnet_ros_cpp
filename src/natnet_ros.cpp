@@ -1,5 +1,6 @@
 
 #include "internal.h"
+#include "transforms.h"
 #include "ros/ros.h"
 
 Internal internal;
@@ -15,17 +16,18 @@ void FrameCallback(sFrameOfMocapData *data, void* pUserData)
 
 int main( int argc, char **argv)
 {
+    ros::init(argc, argv,"natnet_ros_cpp");
+    ros::NodeHandle n("~");
     // defining the default connection type ConnectionType_Multicast/ConnectionType_Unicast
     ConnectionType kDefaultConnectionType = ConnectionType_Multicast;
     // variable to handle the parameters to be passed to the natnet
     sNatNetClientConnectParams g_connectParams;
     // variable to store the server description 
     //sServerDescription g_serverDescription;
-
-    ros::init(argc, argv,"natnet_ros_cpp");
-    ros::NodeHandle n("~");
+    ROS_INFO("NS : %s", n.getNamespace().c_str());
     // create NatNet client
     NatNetClient* g_pClient = new NatNetClient();
+    transforms::initializeOptitrackToBase();
     // print version info
     unsigned char ver[4];
     NatNet_GetVersion( ver );
@@ -60,7 +62,7 @@ int main( int argc, char **argv)
 
     // Assembling the info from the optitrack, counting number of bodies etc..
     // Must extract the info before starting to publish the data.
-    internal.Info(g_pClient, n);
+    internal.Info(g_pClient, n, internal);
 
     ROS_INFO("Client is connected to server and listening for data...");
 

@@ -43,6 +43,8 @@ public:
     float error_amp = 1.0;
     
     std::vector<std::string> object_names;
+    std::vector<std::string> rigidbody_point_names;
+    std::vector<int> rigidbody_points_per_body;
     std::vector<object_data> object_list;
     std::vector<object_data> object_list_prev;
     std::vector<float> temp_pose = {0.0,0.0,0.0};
@@ -143,6 +145,26 @@ public:
             else
             {
                 ROS_WARN("Unable to get the list of objects");
+                ros::shutdown();
+            }
+
+            if (n.getParam("rigidbody_point_names", rigidbody_point_names))
+            {
+                ROS_INFO("Got list of %li rigidbody point names", rigidbody_point_names.size());
+            }
+            else
+            {
+                ROS_WARN("Unable to get the list of rigidbody point names");
+                ros::shutdown();
+            }
+
+            if (n.getParam("rigidbody_points_per_body", rigidbody_points_per_body))
+            {
+                ROS_INFO("Got list of %li rigidbody points per body", rigidbody_points_per_body.size());
+            }
+            else
+            {
+                ROS_WARN("Unable to get the list of rigidbody point names");
                 ros::shutdown();
             }
 

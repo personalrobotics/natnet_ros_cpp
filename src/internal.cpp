@@ -1,8 +1,21 @@
 #include "internal.h"
+#include "transforms.h"
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf2_ros/transform_listener.h>
+#include <natnet_ros_cpp/PointArray.h>
+#include <ros/publisher.h>
 
 void Internal::Init(ros::NodeHandle &n)
 {
     this->rosparam.getNset(n);
+    for (std::size_t i = 0; i < rosparam.object_names.size(); ++i)
+    {
+        this->tempPointArray.push_back(geometry_msgs::Point());
+    }
+    for (std::size_t i = 0; i < rosparam.rigidbody_point_names.size(); ++i)
+    {
+        this->tempPointArray.push_back(geometry_msgs::Point());
+    }
 }
 
 int Internal::ConnectClient(NatNetClient* g_pClient, sNatNetClientConnectParams &g_connectParams)
@@ -67,7 +80,6 @@ void Internal::MessageHandler( Verbosity msgType, const char* msg )
     }
 
     printf( "\n[NatNetLib]" );
-
     switch ( msgType )
     {
         case Verbosity_Debug:
@@ -90,8 +102,9 @@ void Internal::MessageHandler( Verbosity msgType, const char* msg )
     printf( ": %s", msg );
 }
 
-void Internal::Info(NatNetClient* g_pClient, ros::NodeHandle &n)
+void Internal::Info(NatNetClient* g_pClient, ros::NodeHandle &n, Internal &internal)
 {
+    ros::NodeHandle thisN;
     ROS_INFO("[SampleClient] Requesting Data Descriptions...");
     sDataDescriptions* pDataDefs = NULL;
     int iResult = g_pClient->GetDataDescriptionList(&pDataDefs);
@@ -103,7 +116,8 @@ void Internal::Info(NatNetClient* g_pClient, ros::NodeHandle &n)
     {
         ROS_INFO("[SampleClient] Received %d Data/Devices Descriptions:", pDataDefs->nDataDescriptions );
 
-        for(int i=0; i < pDataDefs->nDataDescriptions; i++)
+        int markers = 0;
+        for(int i=pDataDefs->nDataDescriptions - 1; i >= 0; i--)
         {
             if(pDataDefs->arrDataDescriptions[i].type == Descriptor_RigidBody)
             {
@@ -119,7 +133,8 @@ void Internal::Info(NatNetClient* g_pClient, ros::NodeHandle &n)
                 if(rosparam.pub_rigid_body)
                 {
                     this->ListRigidBodies[pRB->ID] = body_name;
-                    this->RigidbodyPub[pRB->szName] = n.advertise<geometry_msgs::PoseStamped>(body_name+"/pose", 50);
+                    ROS_INFO("Body ID : %d", pRB->ID);
+                    this->RigidbodyPub[pRB->szName] = thisN.advertise<geometry_msgs::PoseStamped>("rigidbodies/" + std::to_string(pRB->ID) + "/pose", 50);
                 }
                 if ( pRB->MarkerPositions != NULL && pRB->MarkerRequiredLabels != NULL )
                 {
@@ -129,7 +144,7 @@ void Internal::Info(NatNetClient* g_pClient, ros::NodeHandle &n)
                         const int markerRequiredLabel = pRB->MarkerRequiredLabels[markerIdx];
                         // Creating publisher for the markers of the rigid bodies
                         if(rosparam.pub_rigid_body_marker)
-                            this->RigidbodyMarkerPub[std::to_string(pRB->ID)+std::to_string(markerIdx+1)] = n.advertise<geometry_msgs::PointStamped>(body_name+"/marker"+std::to_string(markerIdx)+"/pose", 50);
+                            this->RigidbodyMarkerPub[std::to_string(pRB->ID)+std::to_string(markerIdx+1)] = thisN.advertise<geometry_msgs::PointStamped>(rosparam.rigidbody_point_names[markers]+"/point", 50);
                         ROS_INFO_COND(rosparam.log_internals,  "\tMarker #%d:", markerIdx );
                         ROS_INFO_COND(rosparam.log_internals,  "\t\tPosition: %.2f, %.2f, %.2f", markerPosition[0], markerPosition[1], markerPosition[2] );
 
@@ -137,6 +152,7 @@ void Internal::Info(NatNetClient* g_pClient, ros::NodeHandle &n)
                         {
                             ROS_INFO_COND(rosparam.log_internals,  "\t\tRequired active label: %d", markerRequiredLabel );
                         }
+                        markers++;
                     }
                 }
             }
@@ -156,14 +172,15 @@ void Internal::Info(NatNetClient* g_pClient, ros::NodeHandle &n)
         }
         if (rosparam.pub_pointcloud)
         {
-            this->PointcloudPub = n.advertise<sensor_msgs::PointCloud>("pointcloud",50);
+            this->PointcloudPub = thisN.advertise<sensor_msgs::PointCloud>("pointcloud",50);
         }
         if (rosparam.pub_individual_marker)
         {
             for (int i=0; i<(int) rosparam.object_list.size(); i++)
             {
-                this->IndividualMarkerPub[rosparam.object_list[i].name] = n.advertise<geometry_msgs::PoseStamped>(rosparam.object_list[i].name+"/pose", 50);
+                this->IndividualMarkerPub[rosparam.object_list[i].name] = thisN.advertise<geometry_msgs::PointStamped>(rosparam.object_list[i].name + "/point", 50);
             }
+            this->PointArrayPub = thisN.advertise<natnet_ros_cpp::PointArray>("MocapPointArray", 1);
         }
     }
 }
@@ -243,6 +260,15 @@ void Internal::DataHandler(sFrameOfMocapData* data, void* pUserData, Internal &i
             internal.rosparam.error_amp = internal.rosparam.error_amp*2;
         else   
             internal.rosparam.error_amp = 1.0;
+
+        internal.msgPointcloud.points.clear();
+        internal.UnlabeledCount = 0;
+
+        natnet_ros_cpp::PointArray pointArray;
+        pointArray.header.stamp = ros::Time::now();
+        pointArray.header.frame_id = "base";
+        pointArray.points = internal.tempPointArray;
+        internal.PointArrayPub.publish(pointArray);
     }
     if(internal.rosparam.pub_pointcloud)
     {
@@ -250,16 +276,14 @@ void Internal::DataHandler(sFrameOfMocapData* data, void* pUserData, Internal &i
         internal.msgPointcloud.header.stamp=ros::Time::now();
         internal.PointcloudPub.publish(internal.msgPointcloud);
     }
-    internal.msgPointcloud.points.clear() ;
-    internal.UnlabeledCount = 0; 
 }
 
 void Internal::PubRigidbodyPose(sRigidBodyData &data, Internal &internal)
 {
     // Creating a msg to put data related to the rigid body and 
     geometry_msgs::PoseStamped msgRigidBodyPose;
-    msgRigidBodyPose.header.frame_id = internal.rosparam.globalFrame;
     msgRigidBodyPose.header.stamp = ros::Time::now();
+    msgRigidBodyPose.header.frame_id = "base";
     msgRigidBodyPose.pose.position.x = data.x;
     msgRigidBodyPose.pose.position.y = data.y;
     msgRigidBodyPose.pose.position.z = data.z;
@@ -267,62 +291,50 @@ void Internal::PubRigidbodyPose(sRigidBodyData &data, Internal &internal)
     msgRigidBodyPose.pose.orientation.y = data.qy;
     msgRigidBodyPose.pose.orientation.z = data.qz;
     msgRigidBodyPose.pose.orientation.w = data.qw;
+
+    // Transforming position from "optitrack" frame to "base" frame
+    tf2::doTransform(msgRigidBodyPose, msgRigidBodyPose, transforms::optitrackToBase);
+
     internal.RigidbodyPub[internal.ListRigidBodies[data.ID]].publish(msgRigidBodyPose);
     
     // creating tf frame to visualize in the rviz
     static tf2_ros::TransformBroadcaster tfRigidBodies;
     geometry_msgs::TransformStamped msgTFRigidBodies;
     msgTFRigidBodies.header.stamp = ros::Time::now();
-    msgTFRigidBodies.header.frame_id = internal.rosparam.globalFrame;
-    msgTFRigidBodies.child_frame_id = internal.ListRigidBodies[data.ID];
-    msgTFRigidBodies.transform.translation.x = data.x;
-    msgTFRigidBodies.transform.translation.y = data.y;
-    msgTFRigidBodies.transform.translation.z = data.z;
-    msgTFRigidBodies.transform.rotation.x = data.qx;
-    msgTFRigidBodies.transform.rotation.y = data.qy;
-    msgTFRigidBodies.transform.rotation.z = data.qz;
-    msgTFRigidBodies.transform.rotation.w = data.qw;
+    msgTFRigidBodies.header.frame_id = "base";
+    msgTFRigidBodies.child_frame_id = "rigidbodies_" + std::to_string(data.ID) + "_pose";
+    msgTFRigidBodies.transform.translation.x = msgRigidBodyPose.pose.position.x;
+    msgTFRigidBodies.transform.translation.y = msgRigidBodyPose.pose.position.y;
+    msgTFRigidBodies.transform.translation.z = msgRigidBodyPose.pose.position.z;
+    msgTFRigidBodies.transform.rotation.x = msgRigidBodyPose.pose.orientation.x;
+    msgTFRigidBodies.transform.rotation.y = msgRigidBodyPose.pose.orientation.y;
+    msgTFRigidBodies.transform.rotation.z = msgRigidBodyPose.pose.orientation.z;
+    msgTFRigidBodies.transform.rotation.w = msgRigidBodyPose.pose.orientation.w;
     tfRigidBodies.sendTransform(msgTFRigidBodies);
-    
 }
 
 void Internal::PubMarkerPose(sMarker &data, Internal &internal)
 {   
     int update = nn_filter(internal.rosparam.object_list, data, internal.rosparam.E,  internal.rosparam.E_x, internal.rosparam.E_y, internal.rosparam.E_z, internal.rosparam.individual_error, internal.rosparam.error_amp);
     if (update>=0)
-    {   internal.UnlabeledCount+=1;
+    {   
+        internal.UnlabeledCount+=1;
         internal.rosparam.object_list[update].detected = true;
         internal.rosparam.object_list[update].x = data.x;
         internal.rosparam.object_list[update].y = data.y;
         internal.rosparam.object_list[update].z = data.z;
     
-        geometry_msgs::PoseStamped msgMarkerPose;
-        msgMarkerPose.header.frame_id = internal.rosparam.globalFrame;
+        geometry_msgs::PointStamped msgMarkerPoint;
+        msgMarkerPoint.header.stamp = ros::Time::now();
+        msgMarkerPoint.header.frame_id = "base";
+        msgMarkerPoint.point.x = data.x;
+        msgMarkerPoint.point.y = data.y;
+        msgMarkerPoint.point.z = data.z;
 
-        msgMarkerPose.header.stamp = ros::Time::now();
-        msgMarkerPose.pose.position.x = data.x;
-        msgMarkerPose.pose.position.y = data.y;
-        msgMarkerPose.pose.position.z = data.z;
-        msgMarkerPose.pose.orientation.x = 0.0;
-        msgMarkerPose.pose.orientation.y = 0.0;
-        msgMarkerPose.pose.orientation.z = 0.0;
-        msgMarkerPose.pose.orientation.w = 1.0;
-        internal.IndividualMarkerPub[internal.rosparam.object_list[update].name].publish(msgMarkerPose);
-
-        // creating tf frame to visualize in the rviz
-        static tf2_ros::TransformBroadcaster tfMarker;
-        geometry_msgs::TransformStamped msgTFMarker;
-        msgTFMarker.header.stamp = ros::Time::now();
-        msgTFMarker.header.frame_id = internal.rosparam.globalFrame;
-        msgTFMarker.child_frame_id = internal.rosparam.object_list[update].name;
-        msgTFMarker.transform.translation.x = data.x;
-        msgTFMarker.transform.translation.y = data.y;
-        msgTFMarker.transform.translation.z = data.z;
-        msgTFMarker.transform.rotation.x = 0;
-        msgTFMarker.transform.rotation.y = 0;
-        msgTFMarker.transform.rotation.z = 0;
-        msgTFMarker.transform.rotation.w = 1;
-        tfMarker.sendTransform(msgTFMarker);
+        // Transforming position from "optitrack" frame to "base" frame
+        tf2::doTransform(msgMarkerPoint, msgMarkerPoint, transforms::optitrackToBase);
+        internal.tempPointArray[static_cast<int>(internal.rosparam.rigidbody_point_names.size()) + update] = msgMarkerPoint.point;
+        internal.IndividualMarkerPub[internal.rosparam.object_list[update].name].publish(msgMarkerPoint);
     }
 }
 
@@ -341,14 +353,17 @@ void Internal::PubRigidbodyMarker(sMarker &data, Internal &internal)
     int modelID, markerID;
     NatNet_DecodeID( data.ID, &modelID, &markerID );
 
-    geometry_msgs::PointStamped msgMarkerPose;
-    msgMarkerPose.header.frame_id = std::to_string(modelID)+std::to_string(markerID);
-    msgMarkerPose.header.stamp = ros::Time::now();
+    geometry_msgs::PointStamped msgMarkerPoint;
+    msgMarkerPoint.header.stamp = ros::Time::now();
+    msgMarkerPoint.header.frame_id = "base";
+    msgMarkerPoint.point.x = data.x + transforms::optitrackToBase.transform.translation.x;
+    msgMarkerPoint.point.y = data.y + transforms::optitrackToBase.transform.translation.y;
+    msgMarkerPoint.point.z = data.z + transforms::optitrackToBase.transform.translation.z;
 
-    msgMarkerPose.point.x = data.x;
-    msgMarkerPose.point.y = data.y;
-    msgMarkerPose.point.z = data.z;
-
-    internal.RigidbodyMarkerPub[std::to_string(modelID)+std::to_string(markerID)].publish(msgMarkerPose);
-
+    int markerNum = 0;
+    for (int i = 0; i < modelID - 1; i++) {
+        markerNum += internal.rosparam.rigidbody_points_per_body[i];
+    }
+    internal.tempPointArray[markerNum + markerID - 1] = msgMarkerPoint.point;
+    internal.RigidbodyMarkerPub[std::to_string(modelID)+std::to_string(markerID)].publish(msgMarkerPoint);
 }

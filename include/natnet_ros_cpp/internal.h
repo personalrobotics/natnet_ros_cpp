@@ -28,6 +28,8 @@ public:
     std::map<double,std::string> ListDevices;
 
     //Initializing the publishers for the ros
+    ros::Publisher PointArrayPub;
+    std::vector<geometry_msgs::Point> tempPointArray;
     std::map<std::string, ros::Publisher> RigidbodyPub;
     std::map<std::string, ros::Publisher> RigidbodyMarkerPub;
     std::map<std::string, ros::Publisher> IndividualMarkerPub;
@@ -53,7 +55,7 @@ public:
 
     // Function to get some useful information from the motion capture system
     // Enable log_internal parameter to have a look at it. 
-    void Info(NatNetClient* g_pClient, ros::NodeHandle &n);
+    void Info(NatNetClient* g_pClient, ros::NodeHandle &n, Internal &internal);
 
     //Provides information on the latencies of the different systems
     void LatenciInfo(sFrameOfMocapData* data, void* pUserData, Internal &internal);
